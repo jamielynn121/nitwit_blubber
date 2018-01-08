@@ -1,0 +1,123 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Jamie McKinnon"
+date: "January 7, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(lattice)
+library(rpart.plot)
+library(rpart)
+library(randomForest)
+library(AppliedPredictiveModeling)
+library(ElemStatLearn)
+library(pgmm)
+```
+
+# Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: (see the section on the Weight Lifting Exercise Dataset).
+
+Open Library Requirements and read in the data:
+```{r}
+setwd("C:/Users/jamie/Downloads")
+
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+```
+
+Check the dimensions and look at categories of classe
+```{r}
+dim(training); dim(testing)
+summary(training$classe)
+```
+
+Create a partition within the traning data for training and validation before using the test set.
+```{r}
+set.seed(614) #random
+
+inTrain <- createDataPartition(y=training$classe, p=0.70, list=FALSE)
+train1  <- training[inTrain,]
+train2  <- training[-inTrain,]
+
+dim(train1); dim(train2)
+```
+train1 includes 70% of the data and train2 inludes 30% of the data
+train2 will be used for cross-validation before testing
+
+##Data Cleaning
+
+Variables with near zero variance in train1 need to be removed from both train1 and train2.
+```{r}
+ZeroVar <- nearZeroVar(train1)
+train1 <- train1[, -ZeroVar]
+train2 <- train2[, -ZeroVar]
+
+# We have removed 54 variables from the data by eliminating near zero variance
+dim(train1); dim(train2)
+```
+
+
+Remove variables that mostly contain NA.
+```{r}
+MostNA <- sapply(train1, function(x) mean(is.na(x))) > 0.95
+train1 <- train1[,MostNA == FALSE]
+train2 <- train2[,MostNA == FALSE]
+
+# We have removed 47 variables from the data by eliminating mostly NA
+dim(train1); dim(train2)
+```
+
+
+Remove columns 1-5.
+```{r}
+train1 <- train1[,-(1:5)]
+train2 <- train2[,-(1:5)]
+
+dim(train1); dim(train2)
+```
+
+
+With the above data cleaning, we have removed a total of 106 variables from our data.
+
+
+#Random Forest
+
+Build the model to train 1 and predict train 2.
+```{r}
+set.seed(614)
+
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modFitRF <- train(classe ~ ., data = train1, method="rf", trControl=controlRF)
+modFitRF$finalModel
+
+predictRF <- predict(modFitRF, newdata = train2)
+conmatRF <- confusionMatrix(predictRF, train2$classe)
+
+conmatRF
+```
+
+
+#Decision Tree
+```{r}
+set.seed(614)
+
+modFitDT <- rpart(classe ~ ., data = train1, method = "class")
+
+predictDT <- predict(modFitDT, newdata = train2, type = "class")
+conmatDT <- confusionMatrix(predictDT, train2$classe)
+
+conmatDT
+```
+
+Random forest had a higher accuracy with prediction; therefore, I will use Random Forest prediction model for the quiz and final prediction of the testing.
+```{r}
+predictTest <- predict(modFitRF, newdata = testing)
+predictTest
+```
+
+
+Quiz = 100%!
